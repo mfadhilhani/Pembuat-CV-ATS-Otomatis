@@ -392,13 +392,13 @@ export default function App() {
               <span className="mx-2">|</span>
               <span>{displayVal(data.personalInfo.email, mockText.email)}</span>
             </div>
-            <div className="text-[11pt] text-black mt-0.5">
-              <span>{displayVal(data.personalInfo.linkedin, mockText.linkedin)}</span>
-              <>
-                <span className="mx-2">|</span>
-                <span>{displayVal(data.personalInfo.github, mockText.github)}</span>
-              </>
-            </div>
+            {(data.personalInfo.linkedin.trim() || data.personalInfo.github.trim()) && (
+              <div className="text-[11pt] text-black mt-0.5">
+                {data.personalInfo.linkedin.trim() && <span>{data.personalInfo.linkedin.trim()}</span>}
+                {data.personalInfo.linkedin.trim() && data.personalInfo.github.trim() && <span className="mx-2">|</span>}
+                {data.personalInfo.github.trim() && <span>{data.personalInfo.github.trim()}</span>}
+              </div>
+            )}
           </div>
 
           {/* PROFIL */}
