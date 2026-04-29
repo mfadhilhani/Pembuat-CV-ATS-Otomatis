@@ -95,7 +95,6 @@ export default function App() {
   const addItem = (category, template) => setData({ ...data, [category]: [...data[category], { id: Date.now(), ...template }] });
   const removeItem = (category, id) => setData({ ...data, [category]: data[category].filter((item) => item.id !== id) });
   const handlePrint = () => window.print();
-  const displayVal = (userValue, mockValue) => (userValue && userValue.trim() !== "" ? userValue : mockValue);
 
   // ─── IMPORT HANDLER (JSON / MD — no API needed) ──────────────────────────
   const handleImport = async (e) => {
@@ -115,7 +114,6 @@ export default function App() {
         return;
       }
 
-      // Baca file sebagai teks
       const text = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result);
@@ -126,13 +124,9 @@ export default function App() {
       let parsed;
 
       if (ext === "json") {
-        // ── JSON: langsung parse ──────────────────────────────────────────────
         const clean = text.replace(/^```json|^```|```$/gm, "").trim();
         parsed = JSON.parse(clean);
       } else {
-        // ── MD / TXT: parse format terstruktur sederhana ─────────────────────
-        // Format yang didukung: key: value per baris, dan blok JSON yang dibungkus ```json...```
-        // Coba cari blok JSON di dalam MD dulu
         const jsonMatch = text.match(/```json([\s\S]*?)```/);
         if (jsonMatch) {
           parsed = JSON.parse(jsonMatch[1].trim());
@@ -141,13 +135,9 @@ export default function App() {
         }
       }
 
-      // ── Validasi struktur minimal ─────────────────────────────────────────
       if (!parsed || typeof parsed !== "object") throw new Error("Format JSON tidak valid.");
 
-      // ── Simpan data lama untuk undo ───────────────────────────────────────
       setPrevData(data);
-
-      // ── Merge ke state dengan id unik ─────────────────────────────────────
       const stamp = Date.now();
       setData({
         personalInfo: {
@@ -185,11 +175,39 @@ export default function App() {
     }
   };
 
-  // ─── DERIVED STATE ───────────────────────────────────────────────────────────
-  const professionalCerts = data.certifications.filter((c) => c.certType === "professional");
-  const trainingCerts = data.certifications.filter((c) => c.certType === "training");
-  const hasAnyCertContent = data.certifications.some((c) => c.name.trim() !== "" || c.issuer.trim() !== "");
-  const showMockCert = !hasAnyCertContent;
+  // ─── DERIVED STATE & LOGIKA PENYEMBUNYIAN (HIDE EMPTY) ─────────────────────────
+  // 1. Cek apakah pengguna sudah mulai mengisi data apa pun
+  const isUserEditing =
+    data.personalInfo.fullName.trim() !== "" ||
+    data.personalInfo.location.trim() !== "" ||
+    data.personalInfo.phone.trim() !== "" ||
+    data.personalInfo.email.trim() !== "" ||
+    data.personalInfo.linkedin.trim() !== "" ||
+    data.personalInfo.github.trim() !== "" ||
+    data.summary.trim() !== "" ||
+    data.skills.trim() !== "" ||
+    data.experiences.some((e) => e.title.trim() !== "" || e.company.trim() !== "") ||
+    data.certifications.some((c) => c.name.trim() !== "" || c.issuer.trim() !== "") ||
+    data.education.some((e) => e.degree.trim() !== "" || e.university.trim() !== "") ||
+    data.organizations.some((o) => o.role.trim() !== "" || o.organization.trim() !== "");
+
+  // 2. Filter item array yang valid (minimal salah satu field penting diisi)
+  const validExps = data.experiences.filter((e) => e.title.trim() !== "" || e.company.trim() !== "");
+  const validEdus = data.education.filter((e) => e.degree.trim() !== "" || e.university.trim() !== "");
+  const validOrgs = data.organizations.filter((o) => o.role.trim() !== "" || o.organization.trim() !== "");
+
+  const validProfCerts = data.certifications.filter((c) => c.certType === "professional" && (c.name.trim() !== "" || c.issuer.trim() !== ""));
+  const validTrainCerts = data.certifications.filter((c) => c.certType === "training" && (c.name.trim() !== "" || c.issuer.trim() !== ""));
+
+  // 3. Status tampilan masing-masing seksi
+  // Jika tidak sedang diedit (isUserEditing = false), tampilkan semua (mock data)
+  // Jika sedang diedit, hanya tampilkan seksi yang ada datanya
+  const showSummary = !isUserEditing || data.summary.trim() !== "";
+  const showSkills = !isUserEditing || data.skills.trim() !== "";
+  const showExps = !isUserEditing || validExps.length > 0;
+  const showCerts = !isUserEditing || validProfCerts.length > 0 || validTrainCerts.length > 0;
+  const showEdus = !isUserEditing || validEdus.length > 0;
+  const showOrgs = !isUserEditing || validOrgs.length > 0;
 
   // ─── MOCK TEXT ───────────────────────────────────────────────────────────────
   const mockText = {
@@ -197,8 +215,8 @@ export default function App() {
     location: "Kota Domisili",
     phone: "081234567890",
     email: "email.profesional@gmail.com",
-    linkedin: "linkedin.com/in/username",
-    github: "github.com/username",
+    linkedin: "[linkedin.com/in/username](https://linkedin.com/in/username)",
+    github: "[github.com/username](https://github.com/username)",
     summary: "[Status/Pendidikan]. Memiliki pengalaman dalam [Bidang/Skill utama]. Terbiasa menggunakan [Alat/Software]. Memiliki kemampuan [Soft skill] yang baik dan siap berkontribusi pada posisi [Posisi yang dilamar].",
     skills: "Microsoft Office (Excel, Word, PPT) | Analisis Data | Pengelolaan Dokumen | SQL | Figma | Komunikasi Lintas Tim | Berpikir Analitis",
     expTitle: "Jabatan / Posisi Pekerjaan",
@@ -321,7 +339,7 @@ export default function App() {
         </div>
 
         <div className="bg-blue-50 border-l-4 border-blue-500 p-3 mb-5 rounded-r-md text-sm text-blue-800">
-          <strong>Petunjuk:</strong> Ketik di form atau gunakan Import CV di atas. Preview kanan otomatis berubah. Teks abu-abu adalah <em>panduan</em> yang hilang saat mulai mengetik.
+          <strong>Petunjuk:</strong> Ketik di form atau gunakan Import CV di atas. Preview kanan otomatis berubah. <strong>Bagian yang dikosongkan tidak akan dicetak di PDF.</strong>
         </div>
 
         {/* 1. Header */}
@@ -509,214 +527,280 @@ export default function App() {
         <div id="cv-preview" className="bg-white shadow-xl print-clean" style={{ width: "210mm", minHeight: "297mm", padding: "2.54cm", boxSizing: "border-box", fontFamily: '"Calibri","Arial",sans-serif', lineHeight: "1.15" }}>
           {/* HEADER */}
           <div className="text-center border-b-[1.5px] border-black pb-3 mb-3">
-            <h1 className="text-[22pt] font-bold uppercase tracking-wide leading-tight text-black mb-1">{displayVal(data.personalInfo.fullName, mockText.fullName)}</h1>
+            <h1 className="text-[22pt] font-bold uppercase tracking-wide leading-tight text-black mb-1">{!isUserEditing ? mockText.fullName : data.personalInfo.fullName}</h1>
             <div className="text-[11pt] text-black">
-              <span>{displayVal(data.personalInfo.location, mockText.location)}</span>
-              <span className="mx-2">|</span>
-              <span>{displayVal(data.personalInfo.phone, mockText.phone)}</span>
-              <span className="mx-2">|</span>
-              <span>{displayVal(data.personalInfo.email, mockText.email)}</span>
+              {[!isUserEditing ? mockText.location : data.personalInfo.location, !isUserEditing ? mockText.phone : data.personalInfo.phone, !isUserEditing ? mockText.email : data.personalInfo.email].filter(Boolean).map((item, i, arr) => (
+                <span key={i}>
+                  {item}
+                  {i < arr.length - 1 && <span className="mx-2">|</span>}
+                </span>
+              ))}
             </div>
-            {(data.personalInfo.linkedin.trim() || data.personalInfo.github.trim()) && (
+            {((!isUserEditing && (mockText.linkedin || mockText.github)) || (isUserEditing && (data.personalInfo.linkedin.trim() || data.personalInfo.github.trim()))) && (
               <div className="text-[11pt] text-black mt-0.5">
-                {data.personalInfo.linkedin.trim() && <span>{data.personalInfo.linkedin.trim()}</span>}
-                {data.personalInfo.linkedin.trim() && data.personalInfo.github.trim() && <span className="mx-2">|</span>}
-                {data.personalInfo.github.trim() && <span>{data.personalInfo.github.trim()}</span>}
+                {[!isUserEditing ? mockText.linkedin : data.personalInfo.linkedin.trim(), !isUserEditing ? mockText.github : data.personalInfo.github.trim()].filter(Boolean).map((item, i, arr) => (
+                  <span key={i}>
+                    {item}
+                    {i < arr.length - 1 && <span className="mx-2">|</span>}
+                  </span>
+                ))}
               </div>
             )}
           </div>
 
           {/* PROFIL */}
-          <div className="mb-3">
-            <h2 className="text-[13pt] font-bold uppercase border-b border-black mb-1 text-black">Profil</h2>
-            <p className="text-[11pt] text-justify text-black">{displayVal(data.summary, mockText.summary)}</p>
-          </div>
+          {showSummary && (
+            <div className="mb-3">
+              <h2 className="text-[13pt] font-bold uppercase border-b border-black mb-1 text-black">Profil</h2>
+              <p className="text-[11pt] text-justify text-black">{!isUserEditing ? mockText.summary : data.summary}</p>
+            </div>
+          )}
 
           {/* KEAHLIAN */}
-          <div className="mb-3">
-            <h2 className="text-[13pt] font-bold uppercase border-b border-black mb-1 text-black">Keahlian</h2>
-            <p className="text-[11pt] text-black">{displayVal(data.skills, mockText.skills)}</p>
-          </div>
+          {showSkills && (
+            <div className="mb-3">
+              <h2 className="text-[13pt] font-bold uppercase border-b border-black mb-1 text-black">Keahlian</h2>
+              <p className="text-[11pt] text-black">{!isUserEditing ? mockText.skills : data.skills}</p>
+            </div>
+          )}
 
           {/* PENGALAMAN */}
-          <div className="mb-3">
-            <h2 className="text-[13pt] font-bold uppercase border-b border-black mb-2 text-black">Pengalaman Kerja</h2>
-            {data.experiences.map((exp, index) => {
-              const isEmpty = index === 0 && !exp.title && !exp.company;
-              if (!exp.title && !isEmpty) return null;
-              const title = isEmpty ? mockText.expTitle : exp.title;
-              const company = isEmpty ? mockText.expCompany : exp.company;
-              const startDate = isEmpty ? mockText.expStart : formatDate(exp.startDate);
-              const endDate = isEmpty ? mockText.expEnd : exp.current ? "Saat Ini" : formatDate(exp.endDate);
-              const description = isEmpty ? mockText.expDesc : exp.description;
-              return (
-                <div key={index} className="mb-2">
+          {showExps && (
+            <div className="mb-3">
+              <h2 className="text-[13pt] font-bold uppercase border-b border-black mb-2 text-black">Pengalaman Kerja</h2>
+              {!isUserEditing ? (
+                // MOCK VIEW
+                <div className="mb-2">
                   <div className="flex justify-between items-baseline mb-0.5 text-black">
                     <span className="text-[11pt] font-bold">
-                      {title} | {company}
+                      {mockText.expTitle} | {mockText.expCompany}
                     </span>
-                    <span className="text-[11pt] italic whitespace-nowrap ml-2">{startDate && `${startDate} – ${endDate}`}</span>
-                  </div>
-                  {description && (
-                    <ul className="list-disc pl-5 text-[11pt] text-black">
-                      {description
-                        .split("\n")
-                        .filter((l) => l.trim())
-                        .map((b, i) => (
-                          <li key={i} className="mb-0.5 text-justify">
-                            {b}
-                          </li>
-                        ))}
-                    </ul>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* SERTIFIKASI & PELATIHAN */}
-          <div className="mb-3">
-            <h2 className="text-[13pt] font-bold uppercase border-b border-black mb-2 text-black">Sertifikasi &amp; Pelatihan</h2>
-            {showMockCert ? (
-              <>
-                <div className="text-[10pt] font-semibold text-black italic mb-1 mt-1">Sertifikasi Profesional</div>
-                <div className="mb-1.5 text-black">
-                  <div className="flex justify-between items-baseline mb-0.5">
-                    <span className="text-[11pt] font-bold">{mockText.certProfName}</span>
-                    <span className="text-[11pt] italic whitespace-nowrap ml-2">{mockText.certDate}</span>
-                  </div>
-                  <div className="text-[11pt]">
-                    {mockText.certProfIssuer} — {mockText.certDesc}
-                  </div>
-                </div>
-                <div className="text-[10pt] font-semibold text-black italic mb-1 mt-2">Pelatihan &amp; Program</div>
-                <div className="mb-1.5 text-black">
-                  <div className="flex justify-between items-baseline mb-0.5">
-                    <span className="text-[11pt] font-bold">{mockText.certTrainName}</span>
-                    <span className="text-[11pt] italic whitespace-nowrap ml-2">{mockText.certDate}</span>
-                  </div>
-                  <div className="text-[11pt]">{mockText.certTrainIssuer}</div>
-                </div>
-              </>
-            ) : (
-              <>
-                {professionalCerts.length > 0 && (
-                  <>
-                    <div className="text-[10pt] font-semibold text-black italic mb-1 mt-1">Sertifikasi Profesional</div>
-                    {professionalCerts.map((cert, i) => {
-                      if (!cert.name && !cert.issuer) return null;
-                      const dateDisplay = cert.startDate ? (cert.hasExpiration && cert.endDate ? `${formatDate(cert.startDate)} – ${formatDate(cert.endDate)}` : `Diterbitkan: ${formatDate(cert.startDate)}`) : "";
-                      return (
-                        <div key={i} className="mb-1.5 text-black">
-                          <div className="flex justify-between items-baseline mb-0.5">
-                            <span className="text-[11pt] font-bold">{cert.name}</span>
-                            <span className="text-[11pt] italic whitespace-nowrap ml-2">{dateDisplay}</span>
-                          </div>
-                          <div className="text-[11pt]">
-                            {cert.issuer}
-                            {cert.description ? ` — ${cert.description}` : ""}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </>
-                )}
-                {trainingCerts.length > 0 && (
-                  <>
-                    <div className={`text-[10pt] font-semibold text-black italic mb-1 ${professionalCerts.length > 0 ? "mt-2" : "mt-1"}`}>Pelatihan &amp; Program</div>
-                    {trainingCerts.map((cert, i) => {
-                      if (!cert.name && !cert.issuer) return null;
-                      const dateDisplay = cert.startDate ? (cert.hasExpiration && cert.endDate ? `${formatDate(cert.startDate)} – ${formatDate(cert.endDate)}` : formatDate(cert.startDate)) : "";
-                      return (
-                        <div key={i} className="mb-1.5 text-black">
-                          <div className="flex justify-between items-baseline mb-0.5">
-                            <span className="text-[11pt] font-bold">{cert.name}</span>
-                            <span className="text-[11pt] italic whitespace-nowrap ml-2">{dateDisplay}</span>
-                          </div>
-                          <div className="text-[11pt]">
-                            {cert.issuer}
-                            {cert.description ? ` — ${cert.description}` : ""}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </>
-                )}
-              </>
-            )}
-          </div>
-
-          {/* PENDIDIKAN */}
-          <div className="mb-3">
-            <h2 className="text-[13pt] font-bold uppercase border-b border-black mb-2 text-black">Pendidikan</h2>
-            {data.education.map((edu, index) => {
-              const isEmpty = index === 0 && !edu.degree && !edu.university;
-              if (!edu.degree && !isEmpty) return null;
-              const degree = isEmpty ? mockText.eduDegree : edu.degree;
-              const university = isEmpty ? mockText.eduUniv : edu.university;
-              const startYear = isEmpty ? mockText.eduStart : edu.startYear;
-              const endYear = isEmpty ? mockText.eduEnd : edu.current ? "Saat Ini" : edu.endYear;
-              const gpa = isEmpty ? mockText.eduGPA : edu.gpa;
-              const details = isEmpty ? mockText.eduDetails : edu.details;
-              return (
-                <div key={index} className="mb-1 text-black">
-                  <div className="flex justify-between items-baseline mb-0.5">
-                    <span className="text-[11pt] font-bold">
-                      {degree} — {university}
+                    <span className="text-[11pt] italic whitespace-nowrap ml-2">
+                      {mockText.expStart} – {mockText.expEnd}
                     </span>
-                    <span className="text-[11pt] italic whitespace-nowrap ml-2">{startYear && `${startYear} – ${endYear}`}</span>
                   </div>
-                  {(gpa || details) && (
-                    <div className="text-[11pt]">
-                      {gpa && <span className="font-semibold mr-2">IPK: {gpa}</span>}
-                      {details && (
-                        <span>
-                          {gpa && "| "}
-                          {details}
+                  <ul className="list-disc pl-5 text-[11pt] text-black">
+                    {mockText.expDesc
+                      .split("\n")
+                      .filter((l) => l.trim())
+                      .map((b, i) => (
+                        <li key={i} className="mb-0.5 text-justify">
+                          {b}
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+              ) : (
+                // USER VIEW (Sudah di-filter hanya yang valid di const validExps)
+                validExps.map((exp, index) => {
+                  const startDate = formatDate(exp.startDate);
+                  const endDate = exp.current ? "Saat Ini" : formatDate(exp.endDate);
+                  return (
+                    <div key={index} className="mb-2">
+                      <div className="flex justify-between items-baseline mb-0.5 text-black">
+                        <span className="text-[11pt] font-bold">
+                          {exp.title} {exp.title && exp.company ? "|" : ""} {exp.company}
                         </span>
+                        <span className="text-[11pt] italic whitespace-nowrap ml-2">{startDate && `${startDate} – ${endDate}`}</span>
+                      </div>
+                      {exp.description && (
+                        <ul className="list-disc pl-5 text-[11pt] text-black">
+                          {exp.description
+                            .split("\n")
+                            .filter((l) => l.trim())
+                            .map((b, i) => (
+                              <li key={i} className="mb-0.5 text-justify">
+                                {b}
+                              </li>
+                            ))}
+                        </ul>
                       )}
                     </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                  );
+                })
+              )}
+            </div>
+          )}
 
-          {/* ORGANISASI */}
-          <div className="mb-3">
-            <h2 className="text-[13pt] font-bold uppercase border-b border-black mb-2 text-black">Organisasi &amp; Kepanitiaan</h2>
-            {data.organizations.map((org, index) => {
-              const isEmpty = index === 0 && !org.role && !org.organization;
-              if (!org.role && !isEmpty) return null;
-              const role = isEmpty ? mockText.orgRole : org.role;
-              const organization = isEmpty ? mockText.orgName : org.organization;
-              const startDate = isEmpty ? mockText.orgStart : formatDate(org.startDate);
-              const endDate = isEmpty ? mockText.orgEnd : org.current ? "Saat Ini" : formatDate(org.endDate);
-              const description = isEmpty ? mockText.orgDesc : org.description;
-              return (
-                <div key={index} className="mb-2 text-black">
+          {/* SERTIFIKASI & PELATIHAN */}
+          {showCerts && (
+            <div className="mb-3">
+              <h2 className="text-[13pt] font-bold uppercase border-b border-black mb-2 text-black">Sertifikasi &amp; Pelatihan</h2>
+              {!isUserEditing ? (
+                <>
+                  <div className="text-[10pt] font-semibold text-black italic mb-1 mt-1">Sertifikasi Profesional</div>
+                  <div className="mb-1.5 text-black">
+                    <div className="flex justify-between items-baseline mb-0.5">
+                      <span className="text-[11pt] font-bold">{mockText.certProfName}</span>
+                      <span className="text-[11pt] italic whitespace-nowrap ml-2">{mockText.certDate}</span>
+                    </div>
+                    <div className="text-[11pt]">
+                      {mockText.certProfIssuer} — {mockText.certDesc}
+                    </div>
+                  </div>
+                  <div className="text-[10pt] font-semibold text-black italic mb-1 mt-2">Pelatihan &amp; Program</div>
+                  <div className="mb-1.5 text-black">
+                    <div className="flex justify-between items-baseline mb-0.5">
+                      <span className="text-[11pt] font-bold">{mockText.certTrainName}</span>
+                      <span className="text-[11pt] italic whitespace-nowrap ml-2">{mockText.certDate}</span>
+                    </div>
+                    <div className="text-[11pt]">{mockText.certTrainIssuer}</div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {validProfCerts.length > 0 && (
+                    <>
+                      <div className="text-[10pt] font-semibold text-black italic mb-1 mt-1">Sertifikasi Profesional</div>
+                      {validProfCerts.map((cert, i) => {
+                        const dateDisplay = cert.startDate ? (cert.hasExpiration && cert.endDate ? `${formatDate(cert.startDate)} – ${formatDate(cert.endDate)}` : `Diterbitkan: ${formatDate(cert.startDate)}`) : "";
+                        return (
+                          <div key={i} className="mb-1.5 text-black">
+                            <div className="flex justify-between items-baseline mb-0.5">
+                              <span className="text-[11pt] font-bold">{cert.name}</span>
+                              <span className="text-[11pt] italic whitespace-nowrap ml-2">{dateDisplay}</span>
+                            </div>
+                            <div className="text-[11pt]">
+                              {cert.issuer}
+                              {cert.description ? ` — ${cert.description}` : ""}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </>
+                  )}
+                  {validTrainCerts.length > 0 && (
+                    <>
+                      <div className={`text-[10pt] font-semibold text-black italic mb-1 ${validProfCerts.length > 0 ? "mt-2" : "mt-1"}`}>Pelatihan &amp; Program</div>
+                      {validTrainCerts.map((cert, i) => {
+                        const dateDisplay = cert.startDate ? (cert.hasExpiration && cert.endDate ? `${formatDate(cert.startDate)} – ${formatDate(cert.endDate)}` : formatDate(cert.startDate)) : "";
+                        return (
+                          <div key={i} className="mb-1.5 text-black">
+                            <div className="flex justify-between items-baseline mb-0.5">
+                              <span className="text-[11pt] font-bold">{cert.name}</span>
+                              <span className="text-[11pt] italic whitespace-nowrap ml-2">{dateDisplay}</span>
+                            </div>
+                            <div className="text-[11pt]">
+                              {cert.issuer}
+                              {cert.description ? ` — ${cert.description}` : ""}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* PENDIDIKAN */}
+          {showEdus && (
+            <div className="mb-3">
+              <h2 className="text-[13pt] font-bold uppercase border-b border-black mb-2 text-black">Pendidikan</h2>
+              {!isUserEditing ? (
+                // MOCK VIEW
+                <div className="mb-1 text-black">
                   <div className="flex justify-between items-baseline mb-0.5">
                     <span className="text-[11pt] font-bold">
-                      {role} | {organization}
+                      {mockText.eduDegree} — {mockText.eduUniv}
                     </span>
-                    <span className="text-[11pt] italic whitespace-nowrap ml-2">{startDate && `${startDate} – ${endDate}`}</span>
+                    <span className="text-[11pt] italic whitespace-nowrap ml-2">
+                      {mockText.eduStart} – {mockText.eduEnd}
+                    </span>
                   </div>
-                  {description && (
-                    <ul className="list-disc pl-5 text-[11pt] text-black">
-                      {description
-                        .split("\n")
-                        .filter((l) => l.trim())
-                        .map((b, i) => (
-                          <li key={i} className="mb-0.5 text-justify">
-                            {b}
-                          </li>
-                        ))}
-                    </ul>
-                  )}
+                  <div className="text-[11pt]">
+                    <span className="font-semibold mr-2">IPK: {mockText.eduGPA}</span>
+                    <span>| {mockText.eduDetails}</span>
+                  </div>
                 </div>
-              );
-            })}
-          </div>
+              ) : (
+                // USER VIEW (Sudah di-filter)
+                validEdus.map((edu, index) => {
+                  const endYear = edu.current ? "Saat Ini" : edu.endYear;
+                  return (
+                    <div key={index} className="mb-1 text-black">
+                      <div className="flex justify-between items-baseline mb-0.5">
+                        <span className="text-[11pt] font-bold">
+                          {edu.degree} {edu.degree && edu.university ? "—" : ""} {edu.university}
+                        </span>
+                        <span className="text-[11pt] italic whitespace-nowrap ml-2">{edu.startYear && `${edu.startYear} – ${endYear}`}</span>
+                      </div>
+                      {(edu.gpa || edu.details) && (
+                        <div className="text-[11pt]">
+                          {edu.gpa && <span className="font-semibold mr-2">IPK: {edu.gpa}</span>}
+                          {edu.details && (
+                            <span>
+                              {edu.gpa && "| "}
+                              {edu.details}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
+
+          {/* ORGANISASI */}
+          {showOrgs && (
+            <div className="mb-3">
+              <h2 className="text-[13pt] font-bold uppercase border-b border-black mb-2 text-black">Organisasi &amp; Kepanitiaan</h2>
+              {!isUserEditing ? (
+                // MOCK VIEW
+                <div className="mb-2 text-black">
+                  <div className="flex justify-between items-baseline mb-0.5">
+                    <span className="text-[11pt] font-bold">
+                      {mockText.orgRole} | {mockText.orgName}
+                    </span>
+                    <span className="text-[11pt] italic whitespace-nowrap ml-2">
+                      {mockText.orgStart} – {mockText.orgEnd}
+                    </span>
+                  </div>
+                  <ul className="list-disc pl-5 text-[11pt] text-black">
+                    {mockText.orgDesc
+                      .split("\n")
+                      .filter((l) => l.trim())
+                      .map((b, i) => (
+                        <li key={i} className="mb-0.5 text-justify">
+                          {b}
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+              ) : (
+                // USER VIEW
+                validOrgs.map((org, index) => {
+                  const startDate = formatDate(org.startDate);
+                  const endDate = org.current ? "Saat Ini" : formatDate(org.endDate);
+                  return (
+                    <div key={index} className="mb-2 text-black">
+                      <div className="flex justify-between items-baseline mb-0.5">
+                        <span className="text-[11pt] font-bold">
+                          {org.role} {org.role && org.organization ? "|" : ""} {org.organization}
+                        </span>
+                        <span className="text-[11pt] italic whitespace-nowrap ml-2">{startDate && `${startDate} – ${endDate}`}</span>
+                      </div>
+                      {org.description && (
+                        <ul className="list-disc pl-5 text-[11pt] text-black">
+                          {org.description
+                            .split("\n")
+                            .filter((l) => l.trim())
+                            .map((b, i) => (
+                              <li key={i} className="mb-0.5 text-justify">
+                                {b}
+                              </li>
+                            ))}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
