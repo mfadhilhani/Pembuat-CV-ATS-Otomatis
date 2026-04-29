@@ -1,7 +1,8 @@
-import { useState } from "react";
-import { Plus, Trash2, FileText, Download, Award, BookOpen } from "lucide-react";
+import { useState, useRef } from "react";
+import { Plus, Trash2, FileText, Download, Award, BookOpen, Upload, Loader2, CheckCircle2, XCircle, RotateCcw } from "lucide-react";
 
-// --- HELPER COMPONENTS ---
+// ─── HELPER COMPONENTS ────────────────────────────────────────────────────────
+
 const SectionHeader = ({ title }) => <h2 className="text-lg font-semibold text-slate-800 border-b pb-2 mb-4 mt-6">{title}</h2>;
 
 const InputField = ({ label, name, value, onChange, placeholder, type = "text", disabled = false }) => (
@@ -14,7 +15,8 @@ const InputField = ({ label, name, value, onChange, placeholder, type = "text", 
       onChange={onChange}
       placeholder={placeholder}
       disabled={disabled}
-      className={`w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 outline-none text-sm ${disabled ? "bg-slate-100 cursor-not-allowed text-slate-400" : ""}`}
+      className={`w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 outline-none text-sm
+        ${disabled ? "bg-slate-100 cursor-not-allowed text-slate-400" : ""}`}
     />
   </div>
 );
@@ -27,7 +29,6 @@ const TextAreaField = ({ label, name, value, onChange, placeholder, hint }) => (
   </div>
 );
 
-// Toggle pill untuk memilih tipe sertifikasi
 const TypeToggle = ({ value, onChange }) => (
   <div className="mb-3">
     <label className="block text-sm font-medium text-slate-600 mb-1">Jenis</label>
@@ -35,43 +36,44 @@ const TypeToggle = ({ value, onChange }) => (
       <button
         type="button"
         onClick={() => onChange("professional")}
-        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${value === "professional" ? "bg-emerald-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors
+          ${value === "professional" ? "bg-emerald-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
       >
-        <Award size={12} />
-        Sertifikasi Profesional
+        <Award size={12} /> Sertifikasi Profesional
       </button>
       <button
         type="button"
         onClick={() => onChange("training")}
-        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors border-l border-slate-200 ${value === "training" ? "bg-blue-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors border-l border-slate-200
+          ${value === "training" ? "bg-blue-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
       >
-        <BookOpen size={12} />
-        Pelatihan / Program
+        <BookOpen size={12} /> Pelatihan / Program
       </button>
     </div>
     <p className="text-xs text-slate-400 mt-1">{value === "professional" ? "Contoh: BNSP, AWS, Alibaba Cloud, Google Professional" : "Contoh: Workshop, Prakerja, GNIK, Bootcamp, Kursus online"}</p>
   </div>
 );
 
+// ─── MAIN APP ─────────────────────────────────────────────────────────────────
+
 export default function App() {
-  const [data, setData] = useState({
-    personalInfo: {
-      fullName: "",
-      location: "",
-      phone: "",
-      email: "",
-      linkedin: "",
-      github: "",
-    },
+  const emptyData = {
+    personalInfo: { fullName: "", location: "", phone: "", email: "", linkedin: "", github: "" },
     summary: "",
     skills: "",
     experiences: [{ id: 1, title: "", company: "", startDate: "", endDate: "", current: false, description: "" }],
     certifications: [{ id: 1, name: "", issuer: "", startDate: "", endDate: "", hasExpiration: true, description: "", certType: "professional" }],
     education: [{ id: 1, degree: "", university: "", startYear: "", endYear: "", current: false, gpa: "", details: "" }],
     organizations: [{ id: 1, role: "", organization: "", startDate: "", endDate: "", current: false, description: "" }],
-  });
+  };
 
-  // --- FORMAT DATE ---
+  const [data, setData] = useState(emptyData);
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState(null); // { type: 'success'|'error', text }
+  const [prevData, setPrevData] = useState(null); // untuk fitur undo
+  const fileInputRef = useRef(null);
+
+  // ─── FORMAT DATE ────────────────────────────────────────────────────────────
   const formatDate = (dateString) => {
     if (!dateString) return "";
     if (dateString.includes("-") && dateString.length === 7) {
@@ -82,29 +84,114 @@ export default function App() {
     return dateString;
   };
 
-  // --- HANDLERS ---
-  const handlePersonalInfoChange = (e) => {
-    setData({ ...data, personalInfo: { ...data.personalInfo, [e.target.name]: e.target.value } });
-  };
-  const handleSimpleChange = (e, field) => {
-    setData({ ...data, [field]: e.target.value });
-  };
+  // ─── STANDARD HANDLERS ──────────────────────────────────────────────────────
+  const handlePersonalInfoChange = (e) => setData({ ...data, personalInfo: { ...data.personalInfo, [e.target.name]: e.target.value } });
+  const handleSimpleChange = (e, field) => setData({ ...data, [field]: e.target.value });
   const handleArrayChange = (category, index, field, value) => {
     const newData = { ...data };
     newData[category][index][field] = value;
     setData(newData);
   };
-  const addItem = (category, template) => {
-    setData({ ...data, [category]: [...data[category], { id: Date.now(), ...template }] });
-  };
-  const removeItem = (category, id) => {
-    setData({ ...data, [category]: data[category].filter((item) => item.id !== id) });
-  };
+  const addItem = (category, template) => setData({ ...data, [category]: [...data[category], { id: Date.now(), ...template }] });
+  const removeItem = (category, id) => setData({ ...data, [category]: data[category].filter((item) => item.id !== id) });
   const handlePrint = () => window.print();
-
   const displayVal = (userValue, mockValue) => (userValue && userValue.trim() !== "" ? userValue : mockValue);
 
-  // --- MOCK DATA ---
+  // ─── IMPORT HANDLER (JSON / MD — no API needed) ──────────────────────────
+  const handleImport = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setImporting(true);
+    setImportMsg(null);
+
+    try {
+      const ext = file.name.split(".").pop().toLowerCase();
+
+      if (!["json", "md", "txt"].includes(ext)) {
+        setImportMsg({ type: "error", text: `Format .${ext} tidak didukung. Gunakan file .json atau .md/.txt yang dihasilkan dari prompt Claude.` });
+        setImporting(false);
+        e.target.value = "";
+        return;
+      }
+
+      // Baca file sebagai teks
+      const text = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsText(file, "utf-8");
+      });
+
+      let parsed;
+
+      if (ext === "json") {
+        // ── JSON: langsung parse ──────────────────────────────────────────────
+        const clean = text.replace(/^```json|^```|```$/gm, "").trim();
+        parsed = JSON.parse(clean);
+      } else {
+        // ── MD / TXT: parse format terstruktur sederhana ─────────────────────
+        // Format yang didukung: key: value per baris, dan blok JSON yang dibungkus ```json...```
+        // Coba cari blok JSON di dalam MD dulu
+        const jsonMatch = text.match(/```json([\s\S]*?)```/);
+        if (jsonMatch) {
+          parsed = JSON.parse(jsonMatch[1].trim());
+        } else {
+          throw new Error("Tidak ditemukan blok JSON di dalam file MD. Pastikan file mengandung blok ```json...```");
+        }
+      }
+
+      // ── Validasi struktur minimal ─────────────────────────────────────────
+      if (!parsed || typeof parsed !== "object") throw new Error("Format JSON tidak valid.");
+
+      // ── Simpan data lama untuk undo ───────────────────────────────────────
+      setPrevData(data);
+
+      // ── Merge ke state dengan id unik ─────────────────────────────────────
+      const stamp = Date.now();
+      setData({
+        personalInfo: {
+          fullName: parsed.personalInfo?.fullName || "",
+          location: parsed.personalInfo?.location || "",
+          phone: parsed.personalInfo?.phone || "",
+          email: parsed.personalInfo?.email || "",
+          linkedin: parsed.personalInfo?.linkedin || "",
+          github: parsed.personalInfo?.github || "",
+        },
+        summary: parsed.summary || "",
+        skills: parsed.skills || "",
+        experiences: parsed.experiences?.length ? parsed.experiences.map((x, i) => ({ id: stamp + i, ...x })) : emptyData.experiences,
+        certifications: parsed.certifications?.length ? parsed.certifications.map((x, i) => ({ id: stamp + 100 + i, ...x })) : emptyData.certifications,
+        education: parsed.education?.length ? parsed.education.map((x, i) => ({ id: stamp + 200 + i, ...x })) : emptyData.education,
+        organizations: parsed.organizations?.length ? parsed.organizations.map((x, i) => ({ id: stamp + 300 + i, ...x })) : emptyData.organizations,
+      });
+
+      setImportMsg({ type: "success", text: `✓ Berhasil mengimpor dari "${file.name}". Periksa hasilnya lalu download PDF.` });
+    } catch (err) {
+      console.error(err);
+      const msg = err.message.includes("JSON") || err.message.includes("parse") ? "Format file tidak valid. Pastikan file JSON tidak rusak dan strukturnya sesuai template." : err.message || "Gagal membaca file. Coba lagi.";
+      setImportMsg({ type: "error", text: msg });
+    } finally {
+      setImporting(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleUndo = () => {
+    if (prevData) {
+      setData(prevData);
+      setPrevData(null);
+      setImportMsg(null);
+    }
+  };
+
+  // ─── DERIVED STATE ───────────────────────────────────────────────────────────
+  const professionalCerts = data.certifications.filter((c) => c.certType === "professional");
+  const trainingCerts = data.certifications.filter((c) => c.certType === "training");
+  const hasAnyCertContent = data.certifications.some((c) => c.name.trim() !== "" || c.issuer.trim() !== "");
+  const showMockCert = !hasAnyCertContent;
+
+  // ─── MOCK TEXT ───────────────────────────────────────────────────────────────
   const mockText = {
     fullName: "NAMA LENGKAP",
     location: "Kota Domisili",
@@ -138,15 +225,7 @@ export default function App() {
     orgDesc: "Mengelola [X] anggota dalam divisi [Nama Divisi] dan memastikan [target/hasil].\nMenyelenggarakan [acara] yang dihadiri oleh [jumlah] peserta secara sukses.",
   };
 
-  // --- PISAH SERTIFIKASI PER TIPE UNTUK PREVIEW ---
-  const professionalCerts = data.certifications.filter((c) => c.certType === "professional");
-  const trainingCerts = data.certifications.filter((c) => c.certType === "training");
-  const hasAnyCertContent = data.certifications.some((c) => c.name.trim() !== "" || c.issuer.trim() !== "");
-  // Jika belum ada konten sama sekali, tampilkan mock
-  const showMockCert = !hasAnyCertContent;
-
-  // Helper render satu entri sertifikasi
-
+  // ─── RENDER ──────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
       <style>{`
@@ -155,11 +234,8 @@ export default function App() {
           #cv-preview, #cv-preview * { visibility: visible; }
           #cv-preview {
             position: absolute; left: 0; top: 0;
-            width: 100%; max-width: 100%;
-            padding: 0; margin: 0;
-            background: white;
-            font-family: 'Calibri', 'Arial', sans-serif;
-            color: black;
+            width: 100%; max-width: 100%; padding: 0; margin: 0;
+            background: white; font-family: 'Calibri', 'Arial', sans-serif; color: black;
           }
           .no-print { display: none !important; }
           @page { size: A4; margin: 2.54cm; }
@@ -167,22 +243,85 @@ export default function App() {
         }
       `}</style>
 
-      {/* ===== KIRI: FORM EDITOR ===== */}
+      {/* ═══ KIRI: FORM EDITOR ═══════════════════════════════════════════════ */}
       <div className="w-full md:w-1/2 p-6 overflow-y-auto h-screen border-r bg-white no-print">
-        <div className="flex items-center justify-between mb-6">
+        {/* Topbar */}
+        <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
               <FileText className="text-blue-600" /> Editor CV ATS
             </h1>
-            <p className="text-sm text-slate-500 mt-1">Font: Calibri | Margin: 1 Inch (2.54cm) | Spasi: 1.15</p>
+            <p className="text-sm text-slate-500 mt-0.5">Font: Calibri | Margin: 1 Inch | Spasi: 1.15</p>
           </div>
           <button onClick={handlePrint} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md flex items-center gap-2 font-medium transition-colors">
             <Download size={18} /> Download PDF
           </button>
         </div>
 
-        <div className="bg-blue-50 border-l-4 border-blue-500 p-3 mb-6 rounded-r-md text-sm text-blue-800">
-          <strong>Petunjuk:</strong> Ketik di form, preview kanan otomatis berubah. Teks abu-abu di preview adalah <em>contoh panduan</em> yang hilang saat kamu mulai mengetik.
+        {/* ── IMPORT PANEL ── */}
+        <div className="border border-dashed border-slate-300 rounded-xl p-4 mb-5 bg-slate-50">
+          <p className="text-sm font-semibold text-slate-700 mb-1 flex items-center gap-2">
+            <Upload size={15} className="text-blue-500" /> Import CV dari File JSON / MD
+          </p>
+          <p className="text-xs text-slate-500 mb-3">
+            Upload file <strong>.json</strong> yang dihasilkan dari prompt Claude — semua kolom terisi otomatis, langsung di browser tanpa API. Didukung: <span className="font-medium">.json</span> (direkomendasikan) dan{" "}
+            <span className="font-medium">.md / .txt</span> yang berisi blok ```json```
+          </p>
+
+          <input ref={fileInputRef} type="file" accept=".json,.md,.txt" onChange={handleImport} className="hidden" />
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                if (!importing) fileInputRef.current?.click();
+              }}
+              disabled={importing}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all
+                ${importing ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700 text-white shadow-sm hover:shadow-md"}`}
+            >
+              {importing ? (
+                <>
+                  <Loader2 size={15} className="animate-spin" /> Memproses file...
+                </>
+              ) : (
+                <>
+                  <Upload size={15} /> Pilih File CV
+                </>
+              )}
+            </button>
+
+            {prevData && (
+              <button onClick={handleUndo} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition-colors">
+                <RotateCcw size={14} /> Batalkan Import
+              </button>
+            )}
+          </div>
+
+          {/* Status message */}
+          {importMsg && (
+            <div
+              className={`mt-3 flex items-start gap-2 p-3 rounded-lg text-sm
+              ${importMsg.type === "success" ? "bg-emerald-50 border border-emerald-200 text-emerald-800" : "bg-red-50 border border-red-200 text-red-800"}`}
+            >
+              {importMsg.type === "success" ? <CheckCircle2 size={16} className="mt-0.5 flex-shrink-0 text-emerald-600" /> : <XCircle size={16} className="mt-0.5 flex-shrink-0 text-red-500" />}
+              <span>{importMsg.text}</span>
+            </div>
+          )}
+
+          {importing && (
+            <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
+              <div className="flex gap-1">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
+                ))}
+              </div>
+              Membaca dan memproses file...
+            </div>
+          )}
+        </div>
+
+        <div className="bg-blue-50 border-l-4 border-blue-500 p-3 mb-5 rounded-r-md text-sm text-blue-800">
+          <strong>Petunjuk:</strong> Ketik di form atau gunakan Import CV di atas. Preview kanan otomatis berubah. Teks abu-abu adalah <em>panduan</em> yang hilang saat mulai mengetik.
         </div>
 
         {/* 1. Header */}
@@ -203,17 +342,17 @@ export default function App() {
           value={data.summary}
           onChange={(e) => handleSimpleChange(e, "summary")}
           placeholder={mockText.summary}
-          hint="Formula: [Status/Jurusan + IPK] + [Pengalaman relevan] + [Keahlian teknis] + [Nilai yang ditawarkan ke perusahaan]."
+          hint="Formula: [Status/Jurusan + IPK] + [Pengalaman relevan] + [Keahlian teknis] + [Nilai yang ditawarkan]."
         />
 
         {/* 3. Keahlian */}
         <SectionHeader title="3. Keahlian" />
         <TextAreaField
-          label="Daftar Keahlian (pisahkan dengan | atau koma)"
+          label="Daftar Keahlian (pisahkan dengan |)"
           value={data.skills}
           onChange={(e) => handleSimpleChange(e, "skills")}
           placeholder={mockText.skills}
-          hint="Campurkan: Hard Skills teknis (Tools/Software), Hard Skills non-teknis, dan Soft Skills yang bisa dibuktikan."
+          hint="Campurkan: Hard Skills teknis, Hard Skills non-teknis, dan Soft Skills yang bisa dibuktikan."
         />
 
         {/* 4. Pengalaman */}
@@ -242,7 +381,7 @@ export default function App() {
               value={exp.description}
               onChange={(e) => handleArrayChange("experiences", index, "description", e.target.value)}
               placeholder={mockText.expDesc}
-              hint="Formula PAR: Kata Kerja Aktif + Konteks/Skala + Hasil Terukur (angka/persentase)."
+              hint="Formula PAR: Kata Kerja Aktif + Konteks/Skala + Hasil Terukur."
             />
           </div>
         ))}
@@ -250,15 +389,15 @@ export default function App() {
           <Plus size={16} /> Tambah Pengalaman
         </button>
 
-        {/* 5. Sertifikasi & Pelatihan — UPDATED */}
+        {/* 5. Sertifikasi & Pelatihan */}
         <SectionHeader title="5. Sertifikasi & Pelatihan" />
         <div className="bg-slate-50 border border-slate-200 rounded-md p-3 mb-4 text-xs text-slate-600">
           <p className="font-medium text-slate-700 mb-1">Panduan pengisian:</p>
           <p>
-            • <span className="font-medium text-emerald-700">Sertifikasi Profesional</span> — ada ujian resmi, diakui industri, punya masa berlaku. Contoh: BNSP, Alibaba Cloud, AWS, Google Professional Certificate.
+            • <span className="font-medium text-emerald-700">Sertifikasi Profesional</span> — ujian resmi, diakui industri, ada masa berlaku. Contoh: BNSP, Alibaba Cloud, AWS.
           </p>
           <p className="mt-1">
-            • <span className="font-medium text-blue-700">Pelatihan / Program</span> — sertifikat kehadiran/penyelesaian kursus, workshop, bootcamp, Prakerja, MSIB, GNIK.
+            • <span className="font-medium text-blue-700">Pelatihan / Program</span> — sertifikat kehadiran/penyelesaian kursus, workshop, Prakerja, MSIB, GNIK.
           </p>
         </div>
         {data.certifications.map((cert, index) => (
@@ -266,10 +405,7 @@ export default function App() {
             <button onClick={() => removeItem("certifications", cert.id)} className="absolute top-4 right-4 text-red-400 hover:text-red-600">
               <Trash2 size={16} />
             </button>
-
-            {/* Toggle tipe — FITUR BARU */}
             <TypeToggle value={cert.certType} onChange={(val) => handleArrayChange("certifications", index, "certType", val)} />
-
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4">
               <InputField
                 label="Nama Sertifikasi / Pelatihan"
@@ -368,20 +504,9 @@ export default function App() {
         </button>
       </div>
 
-      {/* ===== KANAN: LIVE PREVIEW ===== */}
+      {/* ═══ KANAN: LIVE PREVIEW ══════════════════════════════════════════════ */}
       <div className="w-full md:w-1/2 bg-gray-200 p-8 overflow-y-auto h-screen flex justify-center">
-        <div
-          id="cv-preview"
-          className="bg-white shadow-xl print-clean"
-          style={{
-            width: "210mm",
-            minHeight: "297mm",
-            padding: "2.54cm",
-            boxSizing: "border-box",
-            fontFamily: '"Calibri", "Arial", sans-serif',
-            lineHeight: "1.15",
-          }}
-        >
+        <div id="cv-preview" className="bg-white shadow-xl print-clean" style={{ width: "210mm", minHeight: "297mm", padding: "2.54cm", boxSizing: "border-box", fontFamily: '"Calibri","Arial",sans-serif', lineHeight: "1.15" }}>
           {/* HEADER */}
           <div className="text-center border-b-[1.5px] border-black pb-3 mb-3">
             <h1 className="text-[22pt] font-bold uppercase tracking-wide leading-tight text-black mb-1">{displayVal(data.personalInfo.fullName, mockText.fullName)}</h1>
@@ -418,12 +543,12 @@ export default function App() {
             <h2 className="text-[13pt] font-bold uppercase border-b border-black mb-2 text-black">Pengalaman Kerja</h2>
             {data.experiences.map((exp, index) => {
               const isEmpty = index === 0 && !exp.title && !exp.company;
+              if (!exp.title && !isEmpty) return null;
               const title = isEmpty ? mockText.expTitle : exp.title;
               const company = isEmpty ? mockText.expCompany : exp.company;
               const startDate = isEmpty ? mockText.expStart : formatDate(exp.startDate);
               const endDate = isEmpty ? mockText.expEnd : exp.current ? "Saat Ini" : formatDate(exp.endDate);
               const description = isEmpty ? mockText.expDesc : exp.description;
-              if (!title && !isEmpty) return null;
               return (
                 <div key={index} className="mb-2">
                   <div className="flex justify-between items-baseline mb-0.5 text-black">
@@ -436,10 +561,10 @@ export default function App() {
                     <ul className="list-disc pl-5 text-[11pt] text-black">
                       {description
                         .split("\n")
-                        .filter((l) => l.trim() !== "")
-                        .map((bullet, idx) => (
-                          <li key={idx} className="mb-0.5 text-justify">
-                            {bullet}
+                        .filter((l) => l.trim())
+                        .map((b, i) => (
+                          <li key={i} className="mb-0.5 text-justify">
+                            {b}
                           </li>
                         ))}
                     </ul>
@@ -449,12 +574,10 @@ export default function App() {
             })}
           </div>
 
-          {/* ===== SERTIFIKASI & PELATIHAN — UPDATED ===== */}
+          {/* SERTIFIKASI & PELATIHAN */}
           <div className="mb-3">
             <h2 className="text-[13pt] font-bold uppercase border-b border-black mb-2 text-black">Sertifikasi &amp; Pelatihan</h2>
-
             {showMockCert ? (
-              /* Tampilkan mock lengkap jika belum ada input */
               <>
                 <div className="text-[10pt] font-semibold text-black italic mb-1 mt-1">Sertifikasi Profesional</div>
                 <div className="mb-1.5 text-black">
@@ -477,16 +600,12 @@ export default function App() {
               </>
             ) : (
               <>
-                {/* SUB-SEKSI: SERTIFIKASI PROFESIONAL */}
                 {professionalCerts.length > 0 && (
                   <>
                     <div className="text-[10pt] font-semibold text-black italic mb-1 mt-1">Sertifikasi Profesional</div>
                     {professionalCerts.map((cert, i) => {
                       if (!cert.name && !cert.issuer) return null;
-                      let dateDisplay = "";
-                      if (cert.startDate) {
-                        dateDisplay = cert.hasExpiration && cert.endDate ? `${formatDate(cert.startDate)} – ${formatDate(cert.endDate)}` : `Diterbitkan: ${formatDate(cert.startDate)}`;
-                      }
+                      const dateDisplay = cert.startDate ? (cert.hasExpiration && cert.endDate ? `${formatDate(cert.startDate)} – ${formatDate(cert.endDate)}` : `Diterbitkan: ${formatDate(cert.startDate)}`) : "";
                       return (
                         <div key={i} className="mb-1.5 text-black">
                           <div className="flex justify-between items-baseline mb-0.5">
@@ -502,17 +621,12 @@ export default function App() {
                     })}
                   </>
                 )}
-
-                {/* SUB-SEKSI: PELATIHAN & PROGRAM */}
                 {trainingCerts.length > 0 && (
                   <>
                     <div className={`text-[10pt] font-semibold text-black italic mb-1 ${professionalCerts.length > 0 ? "mt-2" : "mt-1"}`}>Pelatihan &amp; Program</div>
                     {trainingCerts.map((cert, i) => {
                       if (!cert.name && !cert.issuer) return null;
-                      let dateDisplay = "";
-                      if (cert.startDate) {
-                        dateDisplay = cert.hasExpiration && cert.endDate ? `${formatDate(cert.startDate)} – ${formatDate(cert.endDate)}` : `${formatDate(cert.startDate)}`;
-                      }
+                      const dateDisplay = cert.startDate ? (cert.hasExpiration && cert.endDate ? `${formatDate(cert.startDate)} – ${formatDate(cert.endDate)}` : formatDate(cert.startDate)) : "";
                       return (
                         <div key={i} className="mb-1.5 text-black">
                           <div className="flex justify-between items-baseline mb-0.5">
@@ -591,10 +705,10 @@ export default function App() {
                     <ul className="list-disc pl-5 text-[11pt] text-black">
                       {description
                         .split("\n")
-                        .filter((l) => l.trim() !== "")
-                        .map((bullet, idx) => (
-                          <li key={idx} className="mb-0.5 text-justify">
-                            {bullet}
+                        .filter((l) => l.trim())
+                        .map((b, i) => (
+                          <li key={i} className="mb-0.5 text-justify">
+                            {b}
                           </li>
                         ))}
                     </ul>
